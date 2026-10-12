@@ -1,188 +1,92 @@
-# AMB82-Mini + Google AI Edge Gallery Smart Giraffe
+AI FocusMate
+智慧藍牙番茄鐘暨桌面 AI 陪伴裝置
+1. 專題簡介
+本專題使用 Arduino UNO、HC-05／HC-06 藍牙模組與 OLED 顯示器，製作一個可由手機或電腦控制的智慧番茄鐘。使用者可以設定專注時間，OLED 會顯示倒數時間、目前狀態、簡單角色表情與 AI 產生的簡短鼓勵訊息。
+2. 專題動機
+傳統番茄鐘通常只有倒數功能。本專題加入藍牙控制、OLED 顯示與 AI 陪伴，希望讓時間管理工具更有互動性與趣味性。
+3. 專題目標
+1. 完成藍牙控制的番茄鐘。
+2. OLED 顯示倒數時間與狀態。
+3. 支援開始、暫停、繼續與重設。
+4. OLED 顯示簡單角色表情。
+5. 顯示 AI 產生的簡短鼓勵或提醒訊息。
+6. 完成可實際展示的桌面原型。
+4. 主要功能
+- 手機或電腦透過藍牙設定番茄鐘。
+- OLED 顯示剩餘時間。
+- 支援 START、PAUSE、CONTINUE、RESET。
+- 顯示 FOCUS、BREAK、DONE 等狀態。
+- 顯示桌面角色表情。
+- 顯示 AI 鼓勵或提醒訊息。
+5. 指令規劃
+指令	功能
+P25	設定 25 分鐘
+P50	設定 50 分鐘
+START	開始
+PAUSE	暫停
+CONTINUE	繼續
+RESET	重設
 
-## Project proposal
 
-The recommended architecture is to make the **AMB82-Mini the giraffe's embodied hardware controller**, while **Google AI Edge Gallery on an Android device provides the higher-level agent/reasoning layer**. Rather than putting a full MCP implementation and a large language model on the microcontroller, the AMB82 exposes a small semantic JSON/HTTP API for perception and physical actions.
-
-```text
-                   SMART GIRAFFE
- ┌────────────────────────────────────────────┐
- │                AMB82-Mini                  │
- │                                            │
- │ Camera ──> local vision ──> perception     │
- │ Mic ─────> audio/event detection           │
- │                                            │
- │              Giraffe Agent API             │
- │        HTTP/WebSocket JSON interface       │
- │                    │                       │
- │       ┌────────────┼────────────┐          │
- │       ▼            ▼            ▼          │
- │    Speaker       Servos        LEDs         │
- │   / playback   head / ears   expression     │
- └────────────────────┬───────────────────────┘
-                      │ Wi-Fi
-                      │
-              Android phone/tablet
- ┌────────────────────▼───────────────────────┐
- │          Google AI Edge Gallery            │
- │                                            │
- │        on-device model / agent             │
- │                 │                          │
- │         Giraffe Agent Skill                │
- │                 │                          │
- │        JS Skill / MCP ecosystem            │
- │                 │                          │
- │       ┌─────────┼─────────┐                │
- │       ▼         ▼         ▼                │
- │     look()    emotion()   move()            │
- │     status()  play()      etc.              │
- └────────────────────────────────────────────┘
+6. 系統架構
+```mermaid
+flowchart TD
+    A[使用者] --> B[手機 / 電腦]
+    B --> C[Bluetooth]
+    C --> D[HC-05 / HC-06]
+    D --> E[Arduino UNO]
+    E --> F[OLED 顯示器]
+    B --> G[AI 模型]
+    G --> B
 ```
+7. 使用流程
+手機 / 電腦設定時間
+        ↓
+Bluetooth 傳送指令
+        ↓
+Arduino 接收資料
+        ↓
+OLED 顯示倒數時間
+        ↓
+番茄鐘完成
+        ↓
+OLED 顯示完成畫面
+        ↓
+顯示 AI 鼓勵 / 提醒訊息
+8. 預計使用硬體
+元件	用途
+Arduino UNO	系統主要控制器
+HC-05 / HC-06	藍牙通訊
+OLED 128×64	顯示時間、狀態、角色與 AI 訊息
+手機或電腦	設定番茄鐘與處理 AI 訊息
 
-## Why use a small hardware API?
 
-MCP is most useful at the agent/tool integration layer. The AMB82 should remain responsible for deterministic embedded functions: camera inference, GPIO/PWM, audio playback, LEDs, sensor events, and motion safety. A compact HTTP/JSON API is easier to debug, uses less RAM/flash, and prevents the language model from directly commanding low-level PWM or GPIO values.
+9. 預計使用軟體
+軟體	用途
+Arduino IDE	Arduino 程式開發
+C / C++	Arduino 控制程式
+Bluetooth Terminal	手機藍牙測試
+Python（選配）	電腦端通訊與 AI 整合
+GitHub	專題文件與程式碼管理
+AI 模型／API	產生陪伴訊息
 
-The agent should therefore request semantic actions such as:
 
-```text
-giraffe.look()
-giraffe.nod()
-giraffe.shake_head()
-giraffe.wave()
-giraffe.set_emotion("happy")
-giraffe.play_sound("hello")
-giraffe.status()
-```
-
-Do **not** expose low-level commands such as arbitrary servo angles, raw PWM duty cycles, or unrestricted GPIO writes to the agent.
-
-## Two-level AI design
-
-```text
-       Fast / reactive                    Cognitive
-       AMB82-Mini                         Android device
-
-       local object detection             reasoning
-       gesture/event detection            conversation
-       camera capture                     agent skills
-       LEDs / audio / servos              MCP integrations
-       safety interlocks                  planning
-```
-
-The AMB82 can turn continuous sensor streams into compact events. For example:
-
-```json
-{
-  "event": "object_detected",
-  "objects": [
-    {"class": "person", "confidence": 0.96},
-    {"class": "book", "confidence": 0.88}
-  ]
-}
-```
-
-This event-driven approach avoids continuously sending camera frames to the phone.
-
-## Recommended first six tools
-
-| Tool | AMB82 role | Agent purpose |
-|---|---|---|
-| `look()` | Camera + local detector | Understand surroundings |
-| `nod()` | Servo animation | Positive physical response |
-| `shake()` | Servo animation | Negative physical response |
-| `emotion()` | LED + bounded motion | Express state |
-| `play()` | microSD/audio playback | Sounds or prerecorded speech |
-| `status()` | Device telemetry | Check device state |
-
-## Example interaction
-
-```text
-User: "What am I holding?"
-
-Agent -> look()
-AMB82 -> {"objects":[{"label":"book","confidence":0.88}]}
-Agent -> formulates an answer
-Agent -> emotion("happy")
-Agent -> nod()
-Phone/TTS or toy audio -> "It looks like a book."
-```
-
-## Firmware/API design
-
-The reference firmware in `GiraffeAgent.ino` exposes endpoints such as:
-
-```text
-GET /status
-GET /look
-GET /nod
-GET /shake
-GET /wave
-GET /emotion/happy
-GET /emotion/curious
-GET /emotion/thinking
-GET /emotion/sleepy
-GET /play/hello
-```
-
-The supplied implementation intentionally contains adapter functions for camera inference, servo control, LEDs, and audio. Replace those adapters with the APIs appropriate to the exact AMB82-Mini board package and peripherals used in the build.
-
-## AI Edge Gallery Skill
-
-The reference `SKILL.md` gives the model a deliberately small physical-action vocabulary. `scripts/index.html` acts as the bridge between the Skill and the AMB82 HTTP API.
-
-The bridge validates actions before sending them to the toy. This is an important design property: model output is never translated into unrestricted hardware access.
-
-## Version 2: events
-
-After command/control is stable, add an event channel, for example:
-
-```text
-ws://giraffe.local/events
-```
-
-Possible events:
-
-```json
-{"event":"person_detected"}
-{"event":"wave_detected"}
-{"event":"button_pressed"}
-{"event":"picked_up"}
-{"event":"object_detected","object":"book"}
-```
-
-This allows the physical toy to initiate interactions without constant polling.
-
-## Safety and privacy
-
-- Enforce servo travel, speed, and timeout limits in firmware, not in prompts.
-- Never expose arbitrary GPIO/PWM control to the language model.
-- Keep moving linkages, batteries, and rigid parts inaccessible through the plush exterior.
-- Use visible indicators for camera/microphone/network activity.
-- Avoid continuous audio/video upload; perform local event detection where practical.
-- Do not store images/audio by default.
-- Provide a physical power switch and preferably hardware camera/microphone disable controls.
-- Validate power supply current and peripheral voltage compatibility before assembly.
-- Treat a modified plush as an engineering prototype unless it has undergone applicable toy/product safety testing.
-
-## Suggested implementation order
-
-1. Bring up Wi-Fi and `/status`.
-2. Implement bounded LED expressions.
-3. Implement one servo and `/nod` with hard travel limits.
-4. Add camera capture/local detection and `/look`.
-5. Add microSD/audio playback and `/play`.
-6. Install the AI Edge Gallery Skill and test the JavaScript bridge.
-7. Add event-driven perception only after command/control is reliable.
-8. Add richer STT/TTS/MCP integrations at the Android agent layer.
-
-## Repository layout
-
-```text
-giraffe-agent/
-├── PROPOSAL.md
-├── GiraffeAgent.ino
-├── SKILL.md
-└── scripts/
-    └── index.html
-```
+10. 兩人分工
+組員 A
+- Arduino 程式
+- 藍牙通訊
+- 番茄鐘功能
+- OLED 顯示
+- 硬體接線與測試
+組員 B
+- AI 訊息功能
+- 手機／電腦端控制
+- GitHub 文件整理
+- 角色內容設計
+共同完成
+- 系統整合
+- 測試
+- 外觀設計
+- Demo 與簡報
+11. 預期成果
+完成一個可放置於桌面的智慧番茄鐘原型。使用者可透過手機或電腦藍牙設定與控制番茄鐘，並在 OLED 上查看倒數時間、狀態、角色表情與 AI 產生的簡短鼓勵訊息。
